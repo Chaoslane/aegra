@@ -324,11 +324,29 @@ class LangGraphService:
             # the same metadata dict, and writes during execution pollute
             # the base graph — breaking subsequent runs.
             try:
+                raw_config = base_graph.config or {}
+
+                if isinstance(raw_config, dict):
+                    # 只对安全字段做 deepcopy，避免 callbacks 里的 Langfuse 对象触发异常
+                    config_no_callbacks = {
+                        k: v for k, v in raw_config.items() if k not in {"callbacks", "callback_manager"}
+                    }
+                    safe_config = copy.deepcopy(config_no_callbacks)
+
+                    # callbacks 只做浅层保留
+                    if "callbacks" in raw_config:
+                        callbacks = raw_config["callbacks"]
+                        safe_config["callbacks"] = list(callbacks) if isinstance(callbacks, list) else callbacks
+                    if "callback_manager" in raw_config:
+                        safe_config["callback_manager"] = raw_config["callback_manager"]
+                else:
+                    safe_config = copy.deepcopy(raw_config)
+
                 graph_to_use = base_graph.copy(
                     update={
                         "checkpointer": checkpointer,
                         "store": store,
-                        "config": copy.deepcopy(base_graph.config),
+                        "config": safe_config,
                     }
                 )
             except Exception as exc:
